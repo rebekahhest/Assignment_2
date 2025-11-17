@@ -41,6 +41,7 @@ hist(parasitoid$lat, main = "Sampling Distribution for Parasitoid Dataset", xlab
 hist(host$lat, main = "Sampling Distribution for Host Dataset", xlab = "Latitude (°)")
 #similar distribution so sampling bias is less of a concern
 
+
 #####create 10 degree latitude bins where bounds are nearest multiple of 10 ------
 
 ##find lower and upper bin bounds for all data
@@ -64,6 +65,18 @@ host_max_lat <- ceiling(max(host$lat) / 10) * 10
 #creates bins using the lower and upper bound for all data where each interval increment is 10
 parasitoid_intervals <- seq(parasitoid_min_lat, parasitoid_max_lat, by = 10)
 host_intervals <- seq(host_min_lat, host_max_lat, by = 10)
+
+##this edit helps to make the code used to calculate latitude intervals less repetitive, and uses a single, reusable function. The new latitude_bins function helps eliminate the rm command, since those variables are no longer created. 
+latitude_bins <- function(df, bin_width = 10) {
+  min_lat <- floor(min(df$lat) / bin_width) * bin_width
+  max_lat <- ceiling(max(df$lat) / bin_width) * bin_width
+  seq(min_lat, max_lat, by = bin_width)
+}
+
+parasitoid_intervals <- latitude_bins(parasitoid)
+host_intervals       <- latitude_bins(host)
+
+##end of edit
 
 rm(parasitoid_min_lat, host_min_lat, parasitoid_max_lat, host_max_lat)
 
@@ -104,9 +117,21 @@ host_matrix <- host_lat_bins %>%
 
 rm(parasitoid_lat_bins, host_lat_bins)
 
+
+##I added a rarefaction curve to be able to visualize and assess whether differences in Shannon diversity might be caused by uneven sampling effort across latitude bins. Adding this analysis improves the script by being able to visually compare curves and detect sampling bias, which can strengthen the confidence in the interpretation of diversity patterns in the parasitoid and host communities.
+rarecurve(parasitoid_matrix[,-1], step = 20, main = "Parasitoid Rarefaction Curves")
+rarecurve(host_matrix[,-1], step = 20, main = "Host Rarefaction Curves")
+#overall interpreation:
+# Parasitoids: curves do not plateau, so there is undersampling across all the bins
+# Host: some curves do plateau so there is more complete sampling across the bins
+
+##end of edit
+
+
 #calculate Shannon Index
 parasitoid_div <- diversity(x = parasitoid_matrix[,-1], index = "shannon")
 host_div <- diversity(x = host_matrix[,-1], index = "shannon")
+
 
 #create data frame to only include latitude bins and shannon index
 parasitoid_shannon <- data.frame(
@@ -188,12 +213,20 @@ merged_gam <- merge(parasitoid_variables, host_variables, by = "lat_midpoint") %
 
 write_tsv(merged_gam, "../data/merged_gam.tsv")
 
+
 ####Generalized Additive Model
 #parasitoid diversity as predicted by latitude and host diversity
 gam_model <- gam(parasitoid_shannon ~ s(lat_midpoint) + s(host_shannon), data = merged_gam)
 summary(gam_model)
 #s(lat_midpoint) p-value 0.0474 < 0.05; significant
 #s(host_shannon) p-value 0.0231 < 0.5; significant
+
+##I added a Pearson's correlation test to evaluate if parasitioid diversity is linearly association with host diversity across latitude bins. This test provides a complementary test to the GAM model to test if there is a linear relationship between the two diversity measures. The additional statistical test improves the script by confirming that the relationship is not linear, which provides a clearer understanding of the association.
+cor_test <- cor.test(merged_gam$parasitoid_shannon, merged_gam$host_shannon)
+cor_test
+#0.357 shows a weak positive correlation, p-value of 0.2307 > 0.05 so not statistically significant, so there's a weak positive correlation between host and parasitoid Shannon diversity, which means that bins with higher host diversity may have higher parasitoid diversity, but that relationship is not statistically significant. 
+
+## end of edit
 
 # Plot the partial effect of each independent variable
 
